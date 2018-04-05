@@ -15,7 +15,7 @@ def generate_gmm_data(points, components, dimensions, seed):
 
     for i in xrange(points):
         if i % 10000 ==0:
-            print 'Iteration ', i, ' on ', points
+            print('Iteration ', i, ' on ', points)
         comp = np.random.choice(np.array(range(components)), p=c_weights)
         result[i] = np.random.multivariate_normal(
             c_means[comp], np.diag(c_variances[comp])

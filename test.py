@@ -30,4 +30,4 @@ test_idx = np.random.choice(range(len(data)), size=5000, replace=False)
 test = data[test_idx]
 features = gmm.predict_proba(test)
 
-print features.shape
+print(features.shape)

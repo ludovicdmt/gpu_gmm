@@ -56,7 +56,7 @@ class GaussianMixture():
         self.input = tf.placeholder(tf.float32, [None, self.DIMENSIONS])
         self.alpha = tf.placeholder_with_default(tf.cast(1.0, tf.float32), [])
         self.beta = tf.placeholder_with_default(tf.cast(1.0, tf.float32), [])
-        print 'Place holders defined'
+        print('Place holders defined')
 
         # constants: D*ln(2*pi), variance prior parameters
         self.ln2piD = tf.constant(np.log(2 * np.pi) * self.DIMENSIONS, dtype=tf.float32)
@@ -74,7 +74,7 @@ class GaussianMixture():
         rand_point_ids, _ = pairwise_distances_argmin_min(mKmeans.cluster_centers_, data)  # Kmeans init
         # rand_point_ids = tf.squeeze(tf.multinomial(tf.ones([1, tf.shape(self.input)[0]]), COMPONENTS)) # Random init
 
-        print 'Input statistics computed'
+        print('Input statistics computed')
 
         # default initial values of the variables
         initial_means = tf.placeholder_with_default(
