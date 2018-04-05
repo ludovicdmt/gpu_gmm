@@ -1,0 +1,10 @@
+# Put here by PyCharm
+.idea/
+
+# Because I made a build on my computer
+build/
+dist/
+gpu_gmm.egg-info
+
+# Because it's useless
+*.pyc
