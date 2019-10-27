@@ -192,10 +192,8 @@ class GaussianMixture():
 
         # initializing trainable variables
         batch_idx = np.random.choice(range(len(data)), size=self.BATCH_SIZE, replace=False)
-<<<<<<< HEAD
-=======
+
         self.input = data[batch_idx]
->>>>>>> 051d12b18e6dd8b9bde93eecf0ab05c4bb0d6b3d
 
         previous_likelihood = -np.inf
 
@@ -214,11 +212,8 @@ class GaussianMixture():
             batch = data[batch_idx]
 
             log_shift, exp_log_shifted_sum, gamma_weighted, gamma_sum = self.E_step()
-<<<<<<< HEAD
 
-=======
             self.input = batch
->>>>>>> 051d12b18e6dd8b9bde93eecf0ab05c4bb0d6b3d
             current_likelihood = self.computeLL(exp_log_shifted_sum, log_shift)
 
             if step > 0:
