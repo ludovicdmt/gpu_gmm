@@ -21,8 +21,8 @@ class GaussianMixture():
         self.alpha_eta = alpha_eta
         self.verbose = verbose
         # creating session
-        tf.reset_default_graph()
-        self.sess = tf.InteractiveSession()
+        tf.compat.v1.reset_default_graph()
+        self.sess = tf.compat.v1.InteractiveSession()
 
 
     def bic(self, ll, X):
@@ -59,9 +59,9 @@ class GaussianMixture():
 
         self.DIMENSIONS = data.shape[1]
         # model inputs: data points (images)
-        self.input = tf.placeholder(tf.float32, [None, self.DIMENSIONS])
-        self.alpha = tf.placeholder_with_default(tf.cast(1.0, tf.float32), [])
-        self.beta = tf.placeholder_with_default(tf.cast(1.0, tf.float32), [])
+        self.input = data
+        self.alpha = 1.0
+        self.beta = 1.0
 
         if self.verbose > 1:
             print('Place holders defined')
@@ -83,41 +83,34 @@ class GaussianMixture():
 
 
 
-        initial_means = tf.placeholder_with_default(
-                tf.cast(gmm.means_, tf.float32),
-                shape=[self.COMPONENTS, self.DIMENSIONS]
-             )
+        initial_means = tf.Variable(gmm.means_.reshape(self.COMPONENTS, self.DIMENSIONS),
+                                             dtype=tf.float32, name="means")
 
+        initial_covariances = tf.Variable(gmm.covariances_.reshape(self.COMPONENTS,
+                                                       self.DIMENSIONS,
+                                                       self.DIMENSIONS),
+                                                   dtype=tf.float32, name="covariances")
 
-        initial_covariances = tf.placeholder_with_default(
-            tf.cast(gmm.covariances_,tf.float32),
-                shape=[self.COMPONENTS, self.DIMENSIONS, self.DIMENSIONS]
-        )
-
-
-
-        initial_weights = tf.placeholder_with_default(
-            tf.cast(tf.constant(gmm.weights_, shape=[self.COMPONENTS]), tf.float32),
-            shape=[self.COMPONENTS]
-        )
+        initial_weights = tf.Variable(gmm.weights_.reshape(self.COMPONENTS),
+                                               dtype=tf.float32, name="weights")
 
         # trainable variables: component means, covariances, and weights
-        self.means = tf.Variable(initial_means, dtype=tf.float32)
-        self.covariances = tf.Variable(initial_covariances, dtype=tf.float32)
-        self.weights = tf.Variable(initial_weights, dtype=tf.float32)
-        self.eta = tf.Variable((1 + self.T0) ** -self.alpha_eta, dtype=tf.float32)
+        self.means = initial_means
+        self.covariances = initial_covariances
+        self.weights = initial_weights
+        self.eta = tf.Variable((1 + self.T0) ** -self.alpha_eta, dtype=tf.float32, name="eta")
 
 
     def computeLL(self, exp_log_shifted_sum, log_shift):
         # log-likelihood: objective function being maximized up to a TOLERANCE delta
-        log_likelihood = tf.reduce_sum(tf.log(exp_log_shifted_sum)) + tf.reduce_sum(log_shift)
+        log_likelihood = tf.reduce_sum(input_tensor=tf.math.log(exp_log_shifted_sum)) + tf.reduce_sum(input_tensor=log_shift)
 
-        return log_likelihood / tf.cast(tf.shape(self.input)[0] * tf.shape(self.input)[1],
+        return log_likelihood / tf.cast(tf.shape(input=self.input)[0] * tf.shape(input=self.input)[1],
                                                             tf.float32)
 
     def computeSampleLL(self, exp_log_shifted_sum, log_shift):
         # log-likelihood: objective function being maximized up to a TOLERANCE delta
-        return tf.log(exp_log_shifted_sum) + log_shift
+        return tf.math.log(exp_log_shifted_sum) + log_shift
 
 
 
@@ -126,32 +119,32 @@ class GaussianMixture():
         # E-step: recomputing responsibilities with respect to the current parameter values
         differences = tf.subtract(tf.expand_dims(self.input, 0), tf.expand_dims(self.means, 1))
         try:
-            diff_times_inv_cov = tf.matmul(differences, tf.matrix_inverse(
+            diff_times_inv_cov = tf.matmul(differences, tf.linalg.inv(
                 self.covariances + 1e-6 * tf.eye(self.DIMENSIONS, batch_shape=[self.COMPONENTS], dtype=tf.float32)))
         except:  # If covariances matrices are not invertible, add some noise to recover
-            diff_times_inv_cov = tf.matmul(differences, tf.matrix_inverse(
+            diff_times_inv_cov = tf.matmul(differences, tf.linalg.inv(
                 self.covariances + tf.eye(self.DIMENSIONS, batch_shape=[self.COMPONENTS], dtype=tf.float32)))
 
-        sum_sq_dist_times_inv_cov = tf.reduce_sum(diff_times_inv_cov * differences, 2)
+        sum_sq_dist_times_inv_cov = tf.reduce_sum(input_tensor=diff_times_inv_cov * differences, axis=2)
 
         try:
-            log_coefficients = tf.expand_dims(self.ln2piD + tf.log(
-                tf.matrix_determinant(self.covariances),
+            log_coefficients = tf.expand_dims(self.ln2piD + tf.math.log(
+                tf.linalg.det(self.covariances),
                 1))
         except:
             # If batch_size is two small regarding DIMENSIONS size,
             # covariances could be not low rank and so not invertible and so matrix_determinant is infinite
-            log_coefficients = tf.expand_dims(self.ln2piD + tf.log(
-                tf.matrix_determinant(self.covariances + 1e-6 * tf.eye(self.DIMENSIONS, batch_shape=[self.COMPONENTS],
+            log_coefficients = tf.expand_dims(self.ln2piD + tf.math.log(
+                tf.linalg.det(self.covariances + 1e-6 * tf.eye(self.DIMENSIONS, batch_shape=[self.COMPONENTS],
                                                                        dtype=tf.float32))),
                                               1)
         log_components = -0.5 * (log_coefficients + sum_sq_dist_times_inv_cov)
-        log_weighted = log_components + tf.expand_dims(tf.log(self.weights), 1)
-        log_shift = tf.expand_dims(tf.reduce_max(log_weighted, 0), 0)
+        log_weighted = log_components + tf.expand_dims(tf.math.log(self.weights), 1)
+        log_shift = tf.expand_dims(tf.reduce_max(input_tensor=log_weighted, axis=0), 0)
         exp_log_shifted = tf.exp(log_weighted - log_shift)
-        exp_log_shifted_sum = tf.reduce_sum(exp_log_shifted, 0)
+        exp_log_shifted_sum = tf.reduce_sum(input_tensor=exp_log_shifted, axis=0)
         gamma = exp_log_shifted / exp_log_shifted_sum
-        gamma_sum = tf.reduce_sum(gamma, 1)
+        gamma_sum = tf.reduce_sum(input_tensor=gamma, axis=1)
         gamma_weighted = gamma / tf.expand_dims(gamma_sum, 1)
 
         return log_shift, exp_log_shifted_sum, gamma_weighted, gamma_sum
@@ -159,15 +152,15 @@ class GaussianMixture():
     def M_step(self, log_shift, exp_log_shifted_sum, gamma_weighted, gamma_sum):
 
         # M-step: maximizing parameter values with respect to the computed responsibilities
-        means_ = tf.reduce_sum(tf.expand_dims(self.input, 0) * tf.expand_dims(gamma_weighted, 2), 1)
+        means_ = tf.reduce_sum(input_tensor=tf.expand_dims(self.input, 0) * tf.expand_dims(gamma_weighted, 2), axis=1)
         differences_ = tf.subtract(tf.expand_dims(self.input, 0), tf.expand_dims(means_, 1))
         sq_dist_matrix = tf.matmul(tf.expand_dims(differences_, 3), tf.expand_dims(differences_, 2))
-        covariances_ = tf.reduce_sum(sq_dist_matrix * tf.expand_dims(tf.expand_dims(gamma_weighted, 2), 3), 1)
-        weights_ = gamma_sum / tf.cast(tf.shape(self.input)[0], tf.float32)
+        covariances_ = tf.reduce_sum(input_tensor=sq_dist_matrix * tf.expand_dims(tf.expand_dims(gamma_weighted, 2), 3), axis=1)
+        weights_ = gamma_sum / tf.cast(tf.shape(input=self.input)[0], tf.float32)
 
         # applying prior to the computed covariances
         covariances_ *= tf.expand_dims(tf.expand_dims(gamma_sum, 1), 2)
-        covariances_ += tf.expand_dims(tf.diag(tf.fill([self.DIMENSIONS], 2.0 * self.beta)), 0)
+        covariances_ += tf.expand_dims(tf.linalg.tensor_diag(tf.fill([self.DIMENSIONS], 2.0 * self.beta)), 0)
         covariances_ /= tf.expand_dims(tf.expand_dims(gamma_sum + (2.0 * (self.alpha + 1.0)), 1), 2)
 
         # log-likelihood: objective function being maximized up to a TOLERANCE delta
@@ -199,7 +192,8 @@ class GaussianMixture():
 
         # initializing trainable variables
         batch_idx = np.random.choice(range(len(data)), size=self.BATCH_SIZE, replace=False)
-        self.sess.run(tf.global_variables_initializer(), feed_dict={self.input: data[batch_idx]})
+
+        self.input = data[batch_idx]
 
         previous_likelihood = -np.inf
 
@@ -217,10 +211,11 @@ class GaussianMixture():
             batch_idx = np.random.choice(range(len(data)), size=self.BATCH_SIZE, replace=False)
             batch = data[batch_idx]
 
-            current_likelihood, _ = self.sess.run(
-                [self.mean_log_likelihood, train_step],
-                feed_dict={self.input: batch}
-            )
+            log_shift, exp_log_shifted_sum, gamma_weighted, gamma_sum = self.E_step()
+
+            self.input = batch
+            current_likelihood = self.computeLL(exp_log_shifted_sum, log_shift)
+
             if step > 0:
                 # computing difference between consecutive likelihoods
                 difference = current_likelihood - previous_likelihood
@@ -247,18 +242,16 @@ class GaussianMixture():
 
     def predict_proba(self, data):
 
-        log_shift, exp_log_shifted_sum, gamma_weighted, gamma_sum = self.sess.run(self.E_step(), feed_dict={self.input: data})
+        log_shift, exp_log_shifted_sum, gamma_weighted, gamma_sum = self.E_step()
 
-        ll = self.sess.run(self.computeLL(exp_log_shifted_sum, log_shift), feed_dict={self.input: data})
+        ll = self.computeLL(exp_log_shifted_sum, log_shift)
 
         return ll, gamma_weighted
 
     def loglikelihood_samples(self, data):
-        log_shift, exp_log_shifted_sum, gamma_weighted, gamma_sum = self.sess.run(self.E_step(),
-                                                                                  feed_dict={self.input: data})
-
-        ll = self.sess.run(self.computeSampleLL(exp_log_shifted_sum, log_shift), feed_dict={self.input: data})
-
+        self.input = data
+        log_shift, exp_log_shifted_sum, gamma_weighted, gamma_sum = self.E_step()
+        ll = self.computeSampleLL(exp_log_shifted_sum, log_shift)
         return ll
 
 
